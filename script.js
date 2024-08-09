@@ -1,5 +1,3 @@
-
-
 // Configuração do Firebase
 var firebaseConfig = {
     apiKey: "AIzaSyDJ1Z55NuuY7ml0JFmTXBCurLORZY5twCM",
@@ -20,6 +18,21 @@ const resultSection = document.getElementById('result-section');
 const resultList = document.getElementById('result-list');
 
 let selectedCandidateId = null;
+let userIp = null;
+
+// Esconder a seção de resultados no início
+resultSection.style.display = 'none';
+
+// Função para obter o IP do usuário
+async function getIp() {
+    try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        userIp = data.ip;
+    } catch (error) {
+        console.error("Erro ao obter IP do usuário: ", error);
+    }
+}
 
 function loadCandidates() {
     db.collection('candidatos').get().then(snapshot => {
@@ -49,11 +62,26 @@ function loadCandidates() {
 
 voteBtn.addEventListener('click', () => {
     if (selectedCandidateId) {
-        updateVoteCount(selectedCandidateId);
-        alert('Voto registrado com sucesso!');
-        showResults();
+        checkIpAndVote(); // Verificar se o IP já votou antes de registrar o voto
     }
 });
+
+async function checkIpAndVote() {
+    if (userIp) {
+        const ipDoc = await db.collection('voters').doc(userIp).get();
+        if (ipDoc.exists) {
+            alert('Você já votou!');
+            showResults(); // Exibir resultados se o usuário já tiver votado
+        } else {
+            await db.collection('voters').doc(userIp).set({ voted: true });
+            updateVoteCount(selectedCandidateId);
+            alert('Voto registrado com sucesso!');
+            showResults(); // Mostrar resultados após o voto
+        }
+    } else {
+        alert('Não foi possível verificar o seu IP.');
+    }
+}
 
 function updateVoteCount(candidateId) {
     const candidateRef = db.collection('candidatos').doc(candidateId);
@@ -67,7 +95,7 @@ function updateVoteCount(candidateId) {
 }
 
 function showResults() {
-    resultSection.style.display = 'block';
+    resultSection.style.display = 'block'; // Exibir a seção de resultados
     resultList.innerHTML = '';
     db.collection('candidatos').orderBy('votos', 'desc').get().then(snapshot => {
         let totalVotes = 0;
@@ -86,7 +114,11 @@ function showResults() {
             bar.className = 'bar';
             const percentage = totalVotes ? (candidate.votos / totalVotes * 100) : 0;
             bar.style.width = `${percentage}%`;
-            bar.textContent = `${candidate.votos} votos (${percentage.toFixed(2)}%)`;
+            bar.textContent = `${percentage.toFixed(2)}%`; // Exibir apenas a porcentagem
+
+                // Altera a cor do texto da porcentagem
+                bar.style.color = 'black'; // Troque 'red' pela cor desejada
+
 
             barContainer.appendChild(bar);
             li.appendChild(barContainer);
@@ -99,6 +131,7 @@ function showResults() {
 
 // Carregar os candidatos ao carregar a página
 window.onload = function() {
-    loadCandidates();
-    showResults();
+    getIp().then(() => {
+        loadCandidates();
+    });
 };
